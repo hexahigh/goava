@@ -3,6 +3,8 @@ module github.com/hexahigh/goava
 go 1.22.1
 
 require (
+	github.com/bits-and-blooms/bloom/v3 v3.7.0
+	github.com/dustin/go-humanize v1.0.1
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.1
@@ -11,7 +13,7 @@ require (
 )
 
 require (
-	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/bits-and-blooms/bitset v1.10.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

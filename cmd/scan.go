@@ -3,6 +3,7 @@ package cmd
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,9 +18,11 @@ import (
 func init() {
 	scanCmd.Flags().StringP("database", "d", "", "Path to database")
 	scanCmd.Flags().BoolP("recursive", "r", false, "Scan recursively")
-	scanCmd.Flags().Bool("ignore-size", false, "Skip size check")
+	scanCmd.Flags().Bool("skip-size", false, "Skip size check, can increase speed at the cost of having to read every file")
 	scanCmd.Flags().Bool("no-summary", false, "Don't print summary")
 	scanCmd.Flags().Bool("full-path", false, "Print full path of scanned files")
+	scanCmd.Flags().BoolP("use-bloom", "b", true, "Use a bloom filter to speed up scanning")
+	scanCmd.Flags().Float64("bloom-fpr", 0.01, "False positive rate for bloom filter. Lower values increase accuracy and ram usage")
 
 	rootCmd.AddCommand(scanCmd)
 
@@ -43,12 +46,15 @@ var scanCmd = &cobra.Command{
 		}
 
 		var database = &db.DB{
-			Mode: "sqlite3",
-			Path: viper.GetString(c + ".database"),
+			Mode:                   "sqlite3",
+			Path:                   viper.GetString(c + ".database"),
+			UseBloom:               viper.GetBool(c + ".use-bloom"),
+			BloomFalsePositiveRate: viper.GetFloat64(c + ".bloom-fpr"),
 		}
 
 		if err := database.Init(); err != nil {
-			log.Fatal(err)
+			fmt.Println(err)
+			log.Panic(err)
 		}
 		defer database.Close()
 
@@ -75,7 +81,7 @@ var scanCmd = &cobra.Command{
 			stats.ScannedFiles++
 			stats.DataScanned += uint64(filesize)
 
-			if !viper.GetBool(c + ".ignore-size") {
+			if !viper.GetBool(c + ".skip-size") {
 				// Check if size matches
 				hdbItems, err := database.GetHDBItemsFromSize(filesize)
 				if err != nil {
@@ -101,13 +107,13 @@ var scanCmd = &cobra.Command{
 
 			hash := hex.EncodeToString(md5.Sum(nil))
 
-			hdbItems, err := database.GetHDBItemsFromHash(hash)
-			if err != nil && err.Error() != "sql: no rows in result set" {
-				log.Errorf("Error getting hdb item: %v", err)
+			hashExists, err := database.HasSigWithHash(hash)
+			if err != nil {
+				log.Errorf("Error checking if hash exists: %v", err)
 				return
 			}
 
-			if len(*hdbItems) == 0 {
+			if !hashExists {
 				log.Infof("No viruses found in %s", path)
 				return
 			} else {
