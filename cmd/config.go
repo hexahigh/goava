@@ -14,6 +14,7 @@ var configDefaults = map[string]interface{}{
 	"verbosity":              4,
 	"config-dir":             getDefaultConfigDir(),
 	"config-file":            "config.toml",
+	"config-reset":           false,
 	"output":                 "text",
 	"forceColors":            false,
 	"disableColors":          false,
@@ -22,12 +23,6 @@ var configDefaults = map[string]interface{}{
 	"fullTimestamp":          false,
 	"disableTimestamp":       false,
 	"prettyPrint":            false,
-	"foo": map[string]interface{}{
-		"bar": true,
-		"hello": map[string]interface{}{
-			"world": "world",
-		},
-	},
 }
 
 func configLoadDefaults() {

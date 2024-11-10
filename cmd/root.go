@@ -44,6 +44,7 @@ func initConfig() {
 	rootCmd.PersistentFlags().Int8P("verbosity", "v", 4, "verbosity level. 0=panic, 1=fatal, 2=error, 3=warn, 4=info, 5=debug, 6=trace")
 	rootCmd.PersistentFlags().StringP("config-dir", "D", getDefaultConfigDir(), "Directory containing data and config files")
 	rootCmd.PersistentFlags().StringP("config-file", "C", "config.toml", "Name of the config file, with extension")
+	rootCmd.PersistentFlags().Bool("config-reset", false, "Reset config file to defaults")
 	rootCmd.PersistentFlags().String("output", "text", "Output mode. Supported values are: text, json")
 	rootCmd.PersistentFlags().Bool("forceColors", false, "Force colors in log output. Only works if output mode is Text")
 	rootCmd.PersistentFlags().Bool("disableColors", false, "Disable colors in log output. Only works if output mode is Text")
@@ -72,13 +73,20 @@ func initConfig() {
 	}
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Warnf("Could not find config file, making one. Cause: %v", err)
 			err = writeDefaultsAs(path.Join(viper.GetString("config-dir"), viper.GetString("config-file")))
 			if err != nil {
 				log.Warnf("Could not write config file. Cause: %v", err)
 			}
 		} else {
 			log.Errorf("Could not read config file. Cause: %v", err)
+		}
+	}
+
+	//* Check if config should be reset
+	if viper.GetBool("config-reset") {
+		err = writeDefaults()
+		if err != nil {
+			log.Warnf("Could not write config file. Cause: %v", err)
 		}
 	}
 
