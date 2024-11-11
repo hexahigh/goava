@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	scanCmd.Flags().StringP("database", "d", "", "Path to database")
+	scanCmd.Flags().StringP("database", "d", "", "Path to folder containing database files")
 	scanCmd.Flags().BoolP("recursive", "r", false, "Scan recursively")
 	scanCmd.Flags().Bool("skip-size", false, "Skip size check, can increase speed at the cost of having to read every file")
 	scanCmd.Flags().Bool("no-summary", false, "Don't print summary")
@@ -46,7 +46,6 @@ var scanCmd = &cobra.Command{
 		}
 
 		var database = &db.DB{
-			Mode:                   "sqlite3",
 			Path:                   viper.GetString(c + ".database"),
 			UseBloom:               viper.GetBool(c + ".use-bloom"),
 			BloomFalsePositiveRate: viper.GetFloat64(c + ".bloom-fpr"),
