@@ -9,6 +9,7 @@ import (
 
 	"github.com/bits-and-blooms/bloom/v3"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/sirupsen/logrus"
 )
 
 type DB struct {
@@ -18,9 +19,17 @@ type DB struct {
 	// If enabled, will use a bloom filter to speed up signature lookups
 	UseBloom bool
 
+	CreateIndexes bool
+
 	// The false positive rate for the bloom filter.
 	// Should be between 0 and 1
 	BloomFalsePositiveRate float64
+
+	// If enabled, will print log messages
+	Log bool
+
+	// The logger
+	Logger *logrus.Logger
 
 	// The sql database connection.
 	sqlC *sql.DB
@@ -47,6 +56,7 @@ func New() *DB {
 
 func (db *DB) Init() error {
 	var err error
+	db.nl(func() { db.Logger.Info("Initializing database...") })
 	db.sqlC, err = sql.Open("sqlite3", ":memory:")
 	if err != nil {
 		return err
@@ -58,16 +68,20 @@ func (db *DB) Init() error {
 		return err
 	}
 
-	// Create indexes
-	_, err = db.sqlC.Exec("CREATE INDEX idx_hash ON hdb (hash)")
-	if err != nil {
-		return err
-	}
-	_, err = db.sqlC.Exec("CREATE INDEX idx_filesize ON hdb (filesize)")
-	if err != nil {
-		return err
+	if db.CreateIndexes {
+		db.nl(func() { db.Logger.Info("Creating indexes...") })
+		// Create indexes
+		_, err = db.sqlC.Exec("CREATE INDEX idx_hash ON hdb (hash)")
+		if err != nil {
+			return err
+		}
+		_, err = db.sqlC.Exec("CREATE INDEX idx_filesize ON hdb (filesize)")
+		if err != nil {
+			return err
+		}
 	}
 
+	db.nl(func() { db.Logger.Info("Loading signatures...") })
 	err = filepath.Walk(db.Path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -77,6 +91,7 @@ func (db *DB) Init() error {
 		}
 		// Decode Clamav hash-based signature files
 		if filepath.Ext(path) == ".hdb" || filepath.Ext(path) == ".hsb" || filepath.Ext(path) == ".hdu" || filepath.Ext(path) == ".hsu" {
+			db.nl(func() { db.Logger.Infof("Loading %s", path) })
 			osfile, err := os.OpenFile(path, os.O_RDONLY, 0)
 			if err != nil {
 				return err
@@ -103,6 +118,7 @@ func (db *DB) Init() error {
 				return err
 			}
 		}
+
 		return nil
 	})
 	if err != nil {
@@ -110,6 +126,7 @@ func (db *DB) Init() error {
 	}
 
 	if db.UseBloom {
+		db.nl(func() { db.Logger.Info("Creating bloom filter...") })
 		stats, err := db.GetHDBStats()
 		if err != nil {
 			return err
@@ -215,4 +232,11 @@ func (db *DB) HasSigWithSize(size int64) (bool, error) {
 	err := db.sqlC.QueryRow("SELECT COUNT(1) FROM hdb WHERE filesize = ?", size).Scan(&count)
 	return count > 0, err
 
+}
+
+// Runs the specified function if Log is true
+func (db *DB) nl(f func()) {
+	if db.Log {
+		f()
+	}
 }

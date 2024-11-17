@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/hexahigh/goava/lib/db"
@@ -22,7 +23,9 @@ func init() {
 	scanCmd.Flags().Bool("no-summary", false, "Don't print summary")
 	scanCmd.Flags().Bool("full-path", false, "Print full path of scanned files")
 	scanCmd.Flags().BoolP("use-bloom", "b", true, "Use a bloom filter to speed up scanning")
-	scanCmd.Flags().Float64("bloom-fpr", 0.01, "False positive rate for bloom filter. Lower values increase accuracy and ram usage")
+	scanCmd.Flags().Float64("bloom-fpr", 0.001, "False positive rate for bloom filter. Lower values increase accuracy and ram usage")
+	scanCmd.Flags().BoolP("indexes", "i", false, "Create indexes on database")
+	scanCmd.Flags().BoolP("infected", "I", false, "Only print infected files, will still print summary")
 
 	rootCmd.AddCommand(scanCmd)
 
@@ -37,6 +40,8 @@ var scanCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		c := commandToConfigString(*cmd)
 
+		startTime := time.Now()
+
 		var stats struct {
 			ScannedFiles   int
 			ScannedFolders int
@@ -49,6 +54,8 @@ var scanCmd = &cobra.Command{
 			Path:                   viper.GetString(c + ".database"),
 			UseBloom:               viper.GetBool(c + ".use-bloom"),
 			BloomFalsePositiveRate: viper.GetFloat64(c + ".bloom-fpr"),
+			CreateIndexes:          viper.GetBool(c + ".indexes"),
+			Log:                    true,
 		}
 
 		if err := database.Init(); err != nil {
@@ -89,7 +96,9 @@ var scanCmd = &cobra.Command{
 				}
 
 				if len(*hdbItems) == 0 {
-					log.Infof("No viruses found in %s", path)
+					if !viper.GetBool(c + ".infected") {
+						log.Infof("No viruses found in %s", path)
+					}
 					return
 				}
 			}
@@ -113,7 +122,9 @@ var scanCmd = &cobra.Command{
 			}
 
 			if !hashExists {
-				log.Infof("No viruses found in %s", path)
+				if !viper.GetBool(c + ".infected") {
+					log.Infof("No viruses found in %s", path)
+				}
 				return
 			} else {
 				stats.InfectedFiles++
@@ -153,6 +164,8 @@ var scanCmd = &cobra.Command{
 			}
 		}
 
+		endTime := time.Now()
+
 		if !viper.GetBool(c + ".no-summary") {
 			hdbStats, err := database.GetHDBStats()
 			if err != nil {
@@ -166,6 +179,7 @@ var scanCmd = &cobra.Command{
 			log.Info("Data scanned: ", humanize.Bytes(stats.DataScanned))
 			log.Info("Data read: ", humanize.Bytes(stats.DataRead))
 			log.Infof("Known viruses: %d", hdbStats.Count)
+			log.Infof("Time: %s", humanize.RelTime(startTime, endTime, "", ""))
 		}
 	},
 }
