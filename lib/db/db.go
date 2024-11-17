@@ -96,9 +96,9 @@ func (db *DB) Init() error {
 						if !db.sizeAlwaysTrue {
 							db.nl(func() {
 								db.Logger.Warnf("%s contains a signature with unknown size, disabling size checks", path)
-								db.sizeAlwaysTrue = true
 							})
 						}
+						db.sizeAlwaysTrue = true
 						break
 					}
 					fileSize, err := strconv.ParseInt(values[1], 10, 64)
