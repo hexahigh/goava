@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -26,6 +27,7 @@ func init() {
 	scanCmd.Flags().Float64("bloom-fpr", 0.001, "False positive rate for bloom filter. Lower values increase accuracy and ram usage")
 	scanCmd.Flags().BoolP("indexes", "i", false, "Create indexes on database")
 	scanCmd.Flags().BoolP("infected", "I", false, "Only print infected files, will still print summary")
+	scanCmd.Flags().BoolP("symlinks", "s", false, "Resolve symbolic links")
 
 	rootCmd.AddCommand(scanCmd)
 
@@ -56,6 +58,7 @@ var scanCmd = &cobra.Command{
 			BloomFalsePositiveRate: viper.GetFloat64(c + ".bloom-fpr"),
 			CreateIndexes:          viper.GetBool(c + ".indexes"),
 			Log:                    true,
+			Logger:                 log.StandardLogger(),
 		}
 
 		if err := database.Init(); err != nil {
@@ -67,9 +70,19 @@ var scanCmd = &cobra.Command{
 		//* Functions
 
 		scanFile := func(path string) {
+			var err error
 			if viper.GetBool(c + ".full-path") {
 				path, _ = filepath.Abs(path)
 			}
+			//* Resolve symlinks if enabled
+			if viper.GetBool(c + ".symlinks") {
+				path, err = filepath.EvalSymlinks(path)
+				if err != nil {
+					log.Errorf("Error resolving symlink: %v", err)
+					return
+				}
+			}
+
 			file, err := os.OpenFile(path, os.O_RDONLY, 0644)
 			if err != nil {
 				log.Errorf("Error opening file: %v", err)
@@ -84,18 +97,50 @@ var scanCmd = &cobra.Command{
 			}
 			filesize := stat.Size()
 
+			if stat.IsDir() {
+				log.Errorf("%s is a directory, this shouldn't happen, skipping", path)
+				return
+			}
+
 			stats.ScannedFiles++
 			stats.DataScanned += uint64(filesize)
 
+			//* Symlink was not resolved so we skip it
+			if stat.Mode()&os.ModeSymlink != 0 {
+				log.Infof("%s is a symlink, skipping", path)
+				return
+			}
+
+			if stat.Mode()&os.ModeDevice != 0 {
+				log.Infof("%s is a device, skipping", path)
+				return
+			}
+
+			if stat.Mode()&os.ModeNamedPipe != 0 {
+				log.Infof("%s is a pipe, skipping", path)
+				return
+			}
+
+			if stat.Mode()&os.ModeSocket != 0 {
+				log.Infof("%s is a socket, skipping", path)
+				return
+			}
+
+			if filesize == 0 {
+				if !viper.GetBool(c + ".infected") {
+					log.Infof("No viruses found in %s", path)
+				}
+				return
+			}
+
 			if !viper.GetBool(c + ".skip-size") {
 				// Check if size matches
-				hdbItems, err := database.GetHDBItemsFromSize(filesize)
+				sizeExists, err := database.HasSigWithSize(int(filesize))
 				if err != nil {
-					log.Errorf("Error getting hdb items: %v", err)
+					log.Errorf("Error checking if size exists: %v", err)
 					return
 				}
-
-				if len(*hdbItems) == 0 {
+				if !sizeExists {
 					if !viper.GetBool(c + ".infected") {
 						log.Infof("No viruses found in %s", path)
 					}
@@ -130,18 +175,46 @@ var scanCmd = &cobra.Command{
 				stats.InfectedFiles++
 				log.Warnf("Virus found in %s", path)
 			}
-
 		}
 
 		scanDir := func(path string) error {
-			stats.ScannedFolders++
-			return filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+			return filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
 				if err != nil {
 					return err
 				}
+
+				// Check if the path is a symlink
+				if info.Mode()&os.ModeSymlink != 0 {
+					if !viper.GetBool(c + ".symlinks") {
+						if !viper.GetBool(c + ".infected") {
+							log.Infof("%s is a symlink, skipping", path)
+						}
+						return nil
+					}
+					// If it's a symlink, resolve it
+					realPath, err := filepath.EvalSymlinks(path)
+					if err != nil {
+						log.Warnf("Failed to resolve symlink %s: %v", path, err)
+						return nil
+					}
+
+					// Get the actual file info of the resolved path
+					stat, err := os.Stat(realPath)
+					if err != nil {
+						log.Warnf("Failed to stat resolved path %s: %v", realPath, err)
+						return nil
+					}
+
+					// Update the info variable with the resolved path's information
+					info = stat
+				}
+
 				if !info.IsDir() {
 					scanFile(path)
+				} else {
+					stats.ScannedFolders++
 				}
+
 				return nil
 			})
 		}
@@ -167,19 +240,13 @@ var scanCmd = &cobra.Command{
 		endTime := time.Now()
 
 		if !viper.GetBool(c + ".no-summary") {
-			hdbStats, err := database.GetHDBStats()
-			if err != nil {
-				log.Errorf("Error getting hdb stats: %v", err)
-				return
-			}
 			log.Info("----------- SCAN SUMMARY -----------")
 			log.Info("Scanned files: ", stats.ScannedFiles)
 			log.Info("Scanned folders: ", stats.ScannedFolders)
 			log.Info("Infected files: ", stats.InfectedFiles)
 			log.Info("Data scanned: ", humanize.Bytes(stats.DataScanned))
 			log.Info("Data read: ", humanize.Bytes(stats.DataRead))
-			log.Infof("Known viruses: %d", hdbStats.Count)
-			log.Infof("Time: %s", humanize.RelTime(startTime, endTime, "", ""))
+			log.Info("Time: ", endTime.Sub(startTime).String())
 		}
 	},
 }
