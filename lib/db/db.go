@@ -34,6 +34,8 @@ type DB struct {
 	// The logger
 	Logger *logrus.Logger
 
+	sizeAlwaysTrue bool
+
 	// The sql database connection.
 	sqlC *sql.DB
 
@@ -90,6 +92,15 @@ func (db *DB) Init() error {
 				line := scanner.Text()
 				if len(line) > 0 {
 					values := strings.Split(line, ":")
+					if values[1] == "*" {
+						if !db.sizeAlwaysTrue {
+							db.nl(func() {
+								db.Logger.Warnf("%s contains a signature with unknown size, disabling size checks", path)
+								db.sizeAlwaysTrue = true
+							})
+						}
+						break
+					}
 					fileSize, err := strconv.ParseInt(values[1], 10, 64)
 					if err != nil {
 						return err
@@ -204,7 +215,12 @@ func (db *DB) HasSigWithHash(hash string) (bool, error) {
 
 // HasSigWithSize returns true if a signature with the given size exists in the database.
 // Uses a binary search.
+// Will always return true if sizeAlwaysTrue is true, this value is set if a signature has an unknown size
 func (db *DB) HasSigWithSize(size int) (bool, error) {
+
+	if db.sizeAlwaysTrue {
+		return true, nil
+	}
 
 	index := sort.SearchInts(db.sizes, size)
 	return index < len(db.sizes) && db.sizes[index] == size, nil
