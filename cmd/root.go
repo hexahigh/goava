@@ -90,6 +90,7 @@ func initConfig() {
 		}
 	}
 
+	log.SetOutput(os.Stdout)
 	log.SetLevel(log.Level(viper.GetInt("verbosity")))
 	switch strings.ToLower(viper.GetString("output")) {
 	case "text":
