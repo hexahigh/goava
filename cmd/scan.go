@@ -239,8 +239,11 @@ var scanCmd = &cobra.Command{
 
 		endTime := time.Now()
 
+		HDBStats := database.GetHDBStats()
+
 		if !viper.GetBool(c + ".no-summary") {
 			log.Info("----------- SCAN SUMMARY -----------")
+			log.Info("Known viruses: ", HDBStats.Count)
 			log.Info("Scanned files: ", stats.ScannedFiles)
 			log.Info("Scanned folders: ", stats.ScannedFolders)
 			log.Info("Infected files: ", stats.InfectedFiles)

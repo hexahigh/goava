@@ -53,7 +53,7 @@ type HDBItem struct {
 }
 
 type HDBStats struct {
-	Count int64
+	Count int
 }
 
 // It's recommended to instantiate your own DB instance
@@ -231,6 +231,12 @@ func (db *DB) GetItemBySize(size int) (*HDBItem, error) {
 		}
 	}
 	return nil, fmt.Errorf("item with size %d not found", size)
+}
+
+func (db *DB) GetHDBStats() HDBStats {
+	return HDBStats{
+		Count: len(db.hashes),
+	}
 }
 
 // Runs the specified function if Log is true
