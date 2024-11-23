@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -223,8 +224,8 @@ func (db *DB) LoadSigs() error {
 
 	// Sort hashes and sizes
 	db.nl(func() { db.Logger.Info("Sorting hashes and sizes...") })
-	sort.Ints(db.sizes)
-	sort.Strings(db.hashes)
+	slices.Sort(db.sizes)
+	slices.Sort(db.hashes)
 
 	return nil
 }
