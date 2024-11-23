@@ -47,6 +47,9 @@ type DB struct {
 
 	bloomFilter *bloom.BloomFilter
 
+	Hashes *[]string
+	Sizes  *[]int
+
 	hashes     []string
 	sizes      []int
 	hashToItem map[string]*HDBItem
@@ -73,6 +76,9 @@ func New() *DB {
 func (db *DB) Init() error {
 	// Initialize hashToItem as an empty map
 	db.hashToItem = make(map[string]*HDBItem)
+
+	db.Hashes = &db.hashes
+	db.Sizes = &db.sizes
 
 	return nil
 }
@@ -132,6 +138,7 @@ func (db *DB) LoadSigs() error {
 				line := scanner.Text()
 				if len(line) > 0 {
 					values := strings.Split(line, ":")
+					var fileSize int64
 					if values[1] == "*" {
 						if db.UnknownSizeAction == 1 {
 							db.nl(func() {
@@ -144,11 +151,14 @@ func (db *DB) LoadSigs() error {
 							})
 							continue
 						}
+						fileSize = -1
+					} else {
+						fileSize, err = strconv.ParseInt(values[1], 10, 64)
+						if err != nil {
+							return err
+						}
 					}
-					fileSize, err := strconv.ParseInt(values[1], 10, 64)
-					if err != nil {
-						return err
-					}
+
 					var hashType string
 					switch len(values[0]) {
 					case 32:
