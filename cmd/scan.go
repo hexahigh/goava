@@ -3,7 +3,6 @@ package cmd
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -61,12 +60,6 @@ var scanCmd = &cobra.Command{
 			Log:                    viper.GetBool(c + ".db-log"),
 			Logger:                 log.StandardLogger(),
 		}
-
-		if err := database.Init(); err != nil {
-			fmt.Println(err)
-			log.Panic(err)
-		}
-		defer database.Close()
 
 		//* Functions
 
@@ -221,6 +214,13 @@ var scanCmd = &cobra.Command{
 		}
 
 		//* End functions
+
+		if err := database.Init(); err != nil {
+			log.Panic(err)
+		}
+		if err := database.LoadAll(); err != nil {
+			log.Panic(err)
+		}
 
 		for _, path := range args {
 			// Check if path is a directory

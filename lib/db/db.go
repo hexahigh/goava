@@ -69,16 +69,50 @@ func New() *DB {
 	return &DB{}
 }
 
+// Init initializes the DB by setting up the hashToItem map.
 func (db *DB) Init() error {
-
-	db.Ping()
-	var err error
-
 	// Initialize hashToItem as an empty map
 	db.hashToItem = make(map[string]*HDBItem)
 
+	return nil
+}
+
+// LoadAll calls LoadSigs and LoadBloom.
+// Should be called after Init
+func (db *DB) LoadAll() error {
+	if err := db.LoadSigs(); err != nil {
+		return err
+	}
+	db.LoadBloom()
+	return nil
+}
+
+// LoadSigs loads Clamav hash-based signature files, as well as Goava CSV files.
+//
+// The function will walk the directory specified in Path and load all files
+// with the following extensions: .hdb, .hsb, .hdu, .hsu, and .csv.
+//
+// For .hdb, .hsb, .hdu, .hsu files, the function will parse the file and
+// extract the hashes, sizes, and malware names. Hashes that have unknown
+// sizes will be skipped or disable size checks depending on the value of
+// UnknownSizeAction.
+//
+// For .csv files, the function will parse the file and extract the hashes,
+// sizes, malware names, and comments.
+//
+// The loaded signatures will be stored in the hashToItem map, with the hash
+// as the key and the HDBItem as the value.
+//
+// The function will also sort the hashes and sizes for use with the
+// HasSigWithHash and HasSigWithSize methods.
+//
+// The function will return an error if there is a problem loading the
+// signatures.
+//
+// Should be called after Init
+func (db *DB) LoadSigs() error {
 	db.nl(func() { db.Logger.Info("Loading signatures...") })
-	err = filepath.Walk(db.Path, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(db.Path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -177,6 +211,17 @@ func (db *DB) Init() error {
 		return err
 	}
 
+	// Sort hashes and sizes
+	db.nl(func() { db.Logger.Info("Sorting hashes and sizes...") })
+	sort.Ints(db.sizes)
+	sort.Strings(db.hashes)
+
+	return nil
+}
+
+// LoadBloom initializes the bloom filter if the UseBloom flag is set to true.
+// Should be called after Init and LoadSigs
+func (db *DB) LoadBloom() {
 	if db.UseBloom {
 		db.nl(func() { db.Logger.Info("Creating bloom filter...") })
 		// Load hashes into bloom filter
@@ -185,13 +230,6 @@ func (db *DB) Init() error {
 			db.bloomFilter.AddString(hash)
 		}
 	}
-
-	// Sort hashes and sizes
-	db.nl(func() { db.Logger.Info("Sorting hashes and sizes...") })
-	sort.Ints(db.sizes)
-	sort.Strings(db.hashes)
-
-	return nil
 }
 
 // Close releases any resources used by the database, such as closing the
