@@ -126,8 +126,9 @@ func (db *DB) LoadSigs() error {
 		if info.IsDir() {
 			return nil
 		}
+		switch filepath.Ext(path) {
 		// Decode Clamav hash-based signature files
-		if filepath.Ext(path) == ".hdb" || filepath.Ext(path) == ".hsb" || filepath.Ext(path) == ".hdu" || filepath.Ext(path) == ".hsu" {
+		case ".hdb", ".hsb", ".hdu", ".hsu":
 			db.nl(func() { db.Logger.Infof("Loading %s", path) })
 			osfile, err := os.OpenFile(path, os.O_RDONLY, 0)
 			if err != nil {
@@ -183,9 +184,7 @@ func (db *DB) LoadSigs() error {
 			if err := scanner.Err(); err != nil {
 				return err
 			}
-		}
-
-		if filepath.Ext(path) == ".csv" {
+		case ".csv":
 			db.nl(func() { db.Logger.Infof("Loading %s", path) })
 			osfile, err := os.OpenFile(path, os.O_RDONLY, 0)
 			if err != nil {
