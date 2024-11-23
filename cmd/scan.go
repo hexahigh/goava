@@ -28,6 +28,7 @@ func init() {
 	scanCmd.Flags().BoolP("indexes", "i", false, "Create indexes on database")
 	scanCmd.Flags().BoolP("infected", "I", false, "Only print infected files, will still print summary")
 	scanCmd.Flags().BoolP("symlinks", "s", false, "Resolve symbolic links")
+	scanCmd.Flags().BoolP("db-log", "L", true, "Enable logs from the database handler")
 
 	rootCmd.AddCommand(scanCmd)
 
@@ -57,7 +58,7 @@ var scanCmd = &cobra.Command{
 			UseBloom:               viper.GetBool(c + ".use-bloom"),
 			BloomFalsePositiveRate: viper.GetFloat64(c + ".bloom-fpr"),
 			CreateIndexes:          viper.GetBool(c + ".indexes"),
-			Log:                    true,
+			Log:                    viper.GetBool(c + ".db-log"),
 			Logger:                 log.StandardLogger(),
 		}
 

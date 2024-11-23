@@ -34,6 +34,12 @@ type DB struct {
 	// The logger
 	Logger *logrus.Logger
 
+	// What should be done if a signature has an unknown size
+	//
+	// 0: Ignore the signature
+	// 1: Make the size check always return true, effectively disabling it
+	UnknownSizeAction int
+
 	sizeAlwaysTrue bool
 
 	// The sql database connection.
@@ -93,13 +99,17 @@ func (db *DB) Init() error {
 				if len(line) > 0 {
 					values := strings.Split(line, ":")
 					if values[1] == "*" {
-						if !db.sizeAlwaysTrue {
+						if db.UnknownSizeAction == 1 {
 							db.nl(func() {
 								db.Logger.Warnf("%s contains a signature with unknown size, disabling size checks", path)
 							})
+							db.sizeAlwaysTrue = true
+						} else if db.UnknownSizeAction == 0 {
+							db.nl(func() {
+								db.Logger.Warnf("%s contains a signature with unknown size, skipping signature", path)
+							})
+							continue
 						}
-						db.sizeAlwaysTrue = true
-						break
 					}
 					fileSize, err := strconv.ParseInt(values[1], 10, 64)
 					if err != nil {
