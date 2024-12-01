@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/bits-and-blooms/bloom/v3"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/sirupsen/logrus"
 )
 
 type DB struct {
@@ -33,7 +33,7 @@ type DB struct {
 	Log bool
 
 	// The logger
-	Logger *logrus.Logger
+	Logger log.Logger
 
 	// What should be done if a signature has an unknown size
 	//
@@ -118,7 +118,7 @@ func (db *DB) LoadAll() error {
 //
 // Should be called after Init
 func (db *DB) LoadSigs() error {
-	db.nl(func() { db.Logger.Info("Loading signatures...") })
+	db.nl(func() { db.Logger.Print("Loading signatures...") })
 	err := filepath.Walk(db.Path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -129,7 +129,7 @@ func (db *DB) LoadSigs() error {
 		switch filepath.Ext(path) {
 		// Decode Clamav hash-based signature files
 		case ".hdb", ".hsb", ".hdu", ".hsu":
-			db.nl(func() { db.Logger.Infof("Loading %s", path) })
+			db.nl(func() { db.Logger.Printf("Loading %s", path) })
 			osfile, err := os.OpenFile(path, os.O_RDONLY, 0)
 			if err != nil {
 				return err
@@ -144,12 +144,12 @@ func (db *DB) LoadSigs() error {
 					if values[1] == "*" {
 						if db.UnknownSizeAction == 1 {
 							db.nl(func() {
-								db.Logger.Warnf("%s contains a signature with unknown size, disabling size checks", path)
+								db.Logger.Printf("%s contains a signature with unknown size, disabling size checks", path)
 							})
 							db.sizeAlwaysTrue = true
 						} else if db.UnknownSizeAction == 0 {
 							db.nl(func() {
-								db.Logger.Warnf("%s contains a signature with unknown size, skipping signature", path)
+								db.Logger.Printf("%s contains a signature with unknown size, skipping signature", path)
 							})
 							continue
 						}
@@ -185,7 +185,7 @@ func (db *DB) LoadSigs() error {
 				return err
 			}
 		case ".csv":
-			db.nl(func() { db.Logger.Infof("Loading %s", path) })
+			db.nl(func() { db.Logger.Printf("Loading %s", path) })
 			osfile, err := os.OpenFile(path, os.O_RDONLY, 0)
 			if err != nil {
 				return err
@@ -222,7 +222,7 @@ func (db *DB) LoadSigs() error {
 	}
 
 	// Sort hashes and sizes
-	db.nl(func() { db.Logger.Info("Sorting hashes and sizes...") })
+	db.nl(func() { db.Logger.Print("Sorting hashes and sizes...") })
 	slices.Sort(db.sizes)
 	slices.Sort(db.hashes)
 
@@ -233,7 +233,7 @@ func (db *DB) LoadSigs() error {
 // Should be called after Init and LoadSigs
 func (db *DB) LoadBloom() {
 	if db.UseBloom {
-		db.nl(func() { db.Logger.Info("Creating bloom filter...") })
+		db.nl(func() { db.Logger.Print("Creating bloom filter...") })
 		// Load hashes into bloom filter
 		db.bloomFilter = bloom.NewWithEstimates(uint(len(db.hashes)), db.BloomFalsePositiveRate)
 		for _, hash := range db.hashes {

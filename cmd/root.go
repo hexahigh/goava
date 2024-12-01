@@ -3,12 +3,15 @@ package cmd
 import (
 	"os"
 	"path"
-	"strings"
+	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+// The root zerolog logger
+var logger zerolog.Logger
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -41,18 +44,16 @@ func init() {
 func initConfig() {
 	configLoadDefaults()
 	//* Load flags
-	rootCmd.PersistentFlags().Int8P("verbosity", "v", 4, "verbosity level. 0=panic, 1=fatal, 2=error, 3=warn, 4=info, 5=debug, 6=trace")
+	rootCmd.PersistentFlags().Int8P("verbosity", "v", 1, "verbosity level. -1 = trace, 0 = debug, 1 = info, 2 = warn, 3 = error, 4 = fatal, 5 = panic")
 	rootCmd.PersistentFlags().StringP("config-dir", "D", getDefaultConfigDir(), "Directory containing data and config files")
 	rootCmd.PersistentFlags().StringP("config-file", "C", "config.toml", "Name of the config file, with extension")
 	rootCmd.PersistentFlags().Bool("config-reset", false, "Reset config file to defaults")
 	rootCmd.PersistentFlags().String("output", "text", "Output mode. Supported values are: text, json")
-	rootCmd.PersistentFlags().Bool("forceColors", false, "Force colors in log output. Only works if output mode is Text")
 	rootCmd.PersistentFlags().Bool("disableColors", false, "Disable colors in log output. Only works if output mode is Text")
-	rootCmd.PersistentFlags().Bool("disableLevelTruncation", false, "When colors are enabled, levels are truncated to 4 characters by default, this disables that. Only works if output mode is Text")
-	rootCmd.PersistentFlags().Bool("padLevelText", true, "Pads level text for better readability. Only works if output mode is Text")
 	rootCmd.PersistentFlags().Bool("fullTimestamp", false, "Show full timestamp in log output. Only works if output mode is Text")
 	rootCmd.PersistentFlags().Bool("disableTimestamp", false, "Disable timestamp in log output. Works for both text and json output")
 	rootCmd.PersistentFlags().Bool("prettyPrint", false, "Indent json output. Not sure why you would want this, but here you go.")
+	rootCmd.PersistentFlags().Bool("caller", false, "Show caller in log output.")
 	rootCmd.ParseFlags(os.Args[1:])
 
 	configBindFlags(*rootCmd)
@@ -66,19 +67,20 @@ func initConfig() {
 	viper.SetConfigType("toml")
 	viper.AddConfigPath(viper.GetString("config-dir"))
 
+	//? These log statements do nothing since the logger is not initialized yet. Not sure where they should write. It shouldn't really matter however as all errors are ignored.
 	//* Load config file
 	err := os.MkdirAll(viper.GetString("config-dir"), 0700)
 	if err != nil {
-		log.Warnf("Could not create config dir. Cause: %v", err)
+		logger.Warn().Msgf("Could not create config dir. Cause: %v", err)
 	}
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			err = writeDefaultsAs(path.Join(viper.GetString("config-dir"), viper.GetString("config-file")))
 			if err != nil {
-				log.Warnf("Could not write config file. Cause: %v", err)
+				logger.Warn().Msgf("Could not write config file. Cause: %v", err)
 			}
 		} else {
-			log.Errorf("Could not read config file. Cause: %v", err)
+			logger.Warn().Msgf("Could not read config file. Cause: %v", err)
 		}
 	}
 
@@ -86,34 +88,40 @@ func initConfig() {
 	if viper.GetBool("config-reset") {
 		err = writeDefaults()
 		if err != nil {
-			log.Warnf("Could not write config file. Cause: %v", err)
+			logger.Warn().Msgf("Could not write config file. Cause: %v", err)
 		}
 	}
 
-	log.SetOutput(os.Stdout)
-	log.SetLevel(log.Level(viper.GetInt("verbosity")))
-	switch strings.ToLower(viper.GetString("output")) {
+	switch viper.GetString("output") {
 	case "text":
-		log.SetFormatter(&log.TextFormatter{
-			ForceColors:            viper.GetBool("forceColors"),
-			DisableColors:          viper.GetBool("disableColors"),
-			DisableLevelTruncation: viper.GetBool("disableLevelTruncation"),
-			PadLevelText:           viper.GetBool("padLevelText"),
-			FullTimestamp:          viper.GetBool("fullTimestamp"),
-			DisableTimestamp:       viper.GetBool("disableTimestamp"),
-		})
+		timeformat := "15:04"
+		if viper.GetBool("fullTimestamp") {
+			timeformat = time.RFC3339
+		}
+		output := zerolog.ConsoleWriter{Out: os.Stdout, NoColor: viper.GetBool("disableColors"), TimeFormat: timeformat}
+		if viper.GetBool("disableTimestamp") {
+			output.PartsOrder = []string{
+				zerolog.LevelFieldName,
+				zerolog.MessageFieldName,
+			}
+		}
+		logger = zerolog.New(output)
 	case "json":
-		log.SetFormatter(&log.JSONFormatter{
-			DisableTimestamp: viper.GetBool("disableTimestamp"),
-			PrettyPrint:      viper.GetBool("prettyPrint"),
-		})
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
+		logger = zerolog.New(os.Stdout)
 	default:
-		log.Fatalf("Unknown output mode: %s", viper.GetString("output"))
+		logger.Fatal().Msgf("Unsupported output mode: %s", viper.GetString("output"))
 	}
 
+	if !viper.GetBool("disableTimestamp") {
+		logger = logger.With().Timestamp().Logger()
+	}
+	if viper.GetBool("caller") {
+		logger = logger.With().Caller().Logger()
+	}
+	logger = logger.Level(zerolog.Level(viper.GetInt("verbosity")))
+
 	for key, value := range viper.GetViper().AllSettings() {
-		log.WithFields(log.Fields{
-			key: value,
-		}).Debug("Command Flag")
+		logger.Debug().Msgf("%s: %v", key, value)
 	}
 }

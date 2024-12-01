@@ -11,7 +11,7 @@ import (
 )
 
 var configDefaults = map[string]interface{}{
-	"verbosity":              4,
+	"verbosity":              1,
 	"config-dir":             getDefaultConfigDir(),
 	"config-file":            "config.toml",
 	"config-reset":           false,
